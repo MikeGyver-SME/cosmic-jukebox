@@ -1,0 +1,52 @@
+name: CosmicJukebox
+options:
+  bundleIdPrefix: studio.mikegyver
+settings:
+  base:
+    SWIFT_VERSION: '5.0'
+    IPHONEOS_DEPLOYMENT_TARGET: '17.0'
+    TARGETED_DEVICE_FAMILY: '1'
+    MARKETING_VERSION: '1.0.0'
+    CURRENT_PROJECT_VERSION: '2'
+targets:
+  CosmicJukebox:
+    type: application
+    platform: iOS
+    sources:
+      - path: CosmicJukebox
+        excludes:
+          - Info.plist
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: studio.mikegyver.cosmicjukebox
+        INFOPLIST_FILE: CosmicJukebox/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: Apple Distribution
+        CODE_SIGN_ENTITLEMENTS: CosmicJukebox/CosmicJukebox.entitlements
+        PROVISIONING_PROFILE_SPECIFIER: ${APP_PROFILE_UUID}
+        DEVELOPMENT_TEAM: ${TEAM_ID}
+    dependencies:
+      - target: CosmicJukeboxWidget
+        embed: true
+  CosmicJukeboxWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: CosmicJukeboxWidget
+        excludes:
+          - Info.plist
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: studio.mikegyver.cosmicjukebox.widget
+        INFOPLIST_FILE: CosmicJukeboxWidget/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: Apple Distribution
+        CODE_SIGN_ENTITLEMENTS: CosmicJukeboxWidget/CosmicJukeboxWidget.entitlements
+        PROVISIONING_PROFILE_SPECIFIER: ${WIDGET_PROFILE_UUID}
+        DEVELOPMENT_TEAM: ${TEAM_ID}
+        APPLICATION_EXTENSION_API_ONLY: YES
