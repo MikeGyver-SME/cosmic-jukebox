@@ -25,6 +25,10 @@ final class PlayerEngine: ObservableObject {
     func start() {
         // A stale `isPlaying=true` from a killed session must never linger.
         JukeboxShared.reset()
+        // Keep the change-detection mirrors consistent with the reset state.
+        lastSyncedTrackId = nil
+        lastSyncedIsPlaying = false
+        lastSyncedArtworkURL = nil
         // Make sure the widget drops any stale entry from the dead session.
         WidgetCenter.shared.reloadAllTimelines()
         setupAudioSession()
@@ -142,13 +146,30 @@ final class PlayerEngine: ObservableObject {
 
     // MARK: - Shared state + widget refresh
 
+    /// Mirrors of the last values written to the App Group. The widget only
+    /// refreshes when something it displays actually changed — blindly
+    /// reloading on every setPlaying burned WidgetKit's reload budget and
+    /// let real changes get lost behind throttled/dropped refreshes.
+    private var lastSyncedTrackId: String?
+    private var lastSyncedIsPlaying = false
+    private var lastSyncedArtworkURL: String?
+
     private func syncSharedState() {
+        let trackId = current?.id
+        let playing = isPlaying
+        let artworkURL = current?.artwork?.absoluteString
+        guard trackId != lastSyncedTrackId
+                || playing != lastSyncedIsPlaying
+                || artworkURL != lastSyncedArtworkURL else { return }
+        lastSyncedTrackId = trackId
+        lastSyncedIsPlaying = playing
+        lastSyncedArtworkURL = artworkURL
         JukeboxShared.write(
-            trackId: current?.id,
-            isPlaying: isPlaying,
+            trackId: trackId,
+            isPlaying: playing,
             title: current?.title,
             artist: current?.artist,
-            artworkURL: current?.artwork?.absoluteString
+            artworkURL: artworkURL
         )
         JukeboxShared.postDarwin(JukeboxShared.stateNotification)
         WidgetCenter.shared.reloadAllTimelines()
@@ -308,7 +329,12 @@ final class PlayerEngine: ObservableObject {
             await MainActor.run {
                 self.artworkImages[trackId] = image
                 // Only publish if this is still the current track.
-                if self.current?.id == trackId { self.updateNowPlaying() }
+                if self.current?.id == trackId {
+                    self.updateNowPlaying()
+                    // The widget reads art from the shared cache, so give it
+                    // a refresh now that the new cover is available.
+                    WidgetCenter.shared.reloadAllTimelines()
+                }
             }
         }
     }

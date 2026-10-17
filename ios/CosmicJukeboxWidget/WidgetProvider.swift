@@ -36,19 +36,16 @@ struct JukeboxProvider: TimelineProvider {
         }
     }
 
+    /// Builds the entry from the shared snapshot. Artwork comes ONLY from the
+    /// shared-container cache — never the network. Doing a download inside
+    /// getTimeline made refreshes slow and droppable: a stalled fetch meant
+    /// WidgetKit kept the previous entry, so the widget showed the old
+    /// song's cover (and old play/pause state) after a track change. The app
+    /// downloads every cover for CarPlay anyway and reloads the widget when
+    /// new art lands, so the cache is always warm a moment after a change.
     private func makeEntry() async -> JukeboxEntry {
         let snap = JukeboxShared.snapshot()
-        var data: Data? = nil
-        if let id = snap.trackId {
-            if let cached = JukeboxShared.cachedArtwork(trackId: id) {
-                data = cached
-            } else if let urlStr = snap.artworkURL, let url = URL(string: urlStr) {
-                if let (bytes, _) = try? await URLSession.shared.data(from: url) {
-                    data = bytes
-                    JukeboxShared.cacheArtwork(bytes, trackId: id)
-                }
-            }
-        }
+        let data: Data? = snap.trackId.flatMap { JukeboxShared.cachedArtwork(trackId: $0) }
         return JukeboxEntry(date: Date(), snapshot: snap, artworkData: data)
     }
 }
