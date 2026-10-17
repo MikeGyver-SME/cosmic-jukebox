@@ -103,7 +103,11 @@ private struct JukeboxWidgetView: View {
     @ViewBuilder
     private var statusLine: some View {
         let snap = entry.snapshot
-        if !snap.hasTrack {
+        if !snap.groupReachable {
+            Text("Widget can't reach shared data")
+                .font(.caption)
+                .foregroundStyle(.red.opacity(0.9))
+        } else if !snap.hasTrack {
             Text("Tap play to start the music")
                 .font(.caption)
                 .foregroundStyle(Brand.muted)

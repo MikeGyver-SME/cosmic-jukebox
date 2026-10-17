@@ -21,8 +21,11 @@ struct TogglePlayPauseIntent: AppIntent {
     static var openAppWhenRun: Bool = false
 
     func perform() async throws -> some IntentResult {
+        // The app applies the toggle and refreshes the widget itself when
+        // something actually changed, so don't spend WidgetKit's limited
+        // daily refresh budget re-rendering the pre-toggle state here.
+        // (Burning the budget is what froze the widget on a stale entry.)
         JukeboxShared.postDarwin(JukeboxShared.toggleNotification)
-        WidgetCenter.shared.reloadAllTimelines()
         return .result()
     }
 }

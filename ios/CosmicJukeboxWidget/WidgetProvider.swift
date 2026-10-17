@@ -15,7 +15,8 @@ struct JukeboxProvider: TimelineProvider {
             snapshot: JukeboxShared.PlaybackSnapshot(
                 trackId: nil, isPlaying: false,
                 title: "Cosmic Jukebox", artist: "MikeGyver Studio",
-                artworkURL: nil, heartbeat: nil
+                artworkURL: nil, heartbeat: nil,
+                groupReachable: JukeboxShared.groupReachable
             ),
             artworkData: nil
         )

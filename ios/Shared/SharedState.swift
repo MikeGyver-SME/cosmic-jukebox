@@ -27,8 +27,18 @@ enum JukeboxShared {
     }
 
     static var defaults: UserDefaults {
-        UserDefaults(suiteName: appGroupID) ?? .standard
+        groupDefaults ?? .standard
     }
+
+    /// The App Group-backed defaults, or nil when the extension/process is
+    /// not entitled to the group (e.g. its provisioning profile lacks the
+    /// App Groups capability). The widget surfaces this instead of silently
+    /// showing default content forever.
+    static var groupDefaults: UserDefaults? {
+        UserDefaults(suiteName: appGroupID)
+    }
+
+    static var groupReachable: Bool { groupDefaults != nil }
 
     static func postDarwin(_ name: String) {
         CFNotificationCenterPostNotification(
@@ -45,6 +55,10 @@ enum JukeboxShared {
         var artist: String?
         var artworkURL: String?
         var heartbeat: Date?
+        /// False when this process can't reach the App Group (missing
+        /// capability in its provisioning profile). The widget shows a
+        /// diagnostic instead of permanent default content.
+        var groupReachable: Bool
 
         var heartbeatFresh: Bool {
             guard let hb = heartbeat else { return false }
@@ -66,7 +80,8 @@ enum JukeboxShared {
             title: d.string(forKey: Key.title),
             artist: d.string(forKey: Key.artist),
             artworkURL: d.string(forKey: Key.artworkURL),
-            heartbeat: hb
+            heartbeat: hb,
+            groupReachable: groupDefaults != nil
         )
     }
 
