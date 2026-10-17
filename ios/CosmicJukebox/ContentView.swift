@@ -35,6 +35,10 @@ struct ContentView: View {
                     trackList
                 }
                 NowPlayingBar()
+                Text(engine.syncDebug)
+                    .font(.caption2)
+                    .foregroundStyle(Brand.muted.opacity(0.7))
+                    .padding(.bottom, 2)
             }
         }
         .preferredColorScheme(.dark)

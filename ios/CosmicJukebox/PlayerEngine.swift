@@ -13,6 +13,8 @@ final class PlayerEngine: ObservableObject {
     @Published private(set) var isPlaying = false
     @Published var isLoadingPlaylist = false
     @Published var errorMessage: String?
+    /// One-line diagnostic: App Group reachability + last state synced to it.
+    @Published private(set) var syncDebug: String = "starting…"
 
     private var player: AVPlayer?
     private var heartbeatTimer: Timer?
@@ -29,6 +31,7 @@ final class PlayerEngine: ObservableObject {
         lastSyncedTrackId = nil
         lastSyncedIsPlaying = false
         lastSyncedArtworkURL = nil
+        updateSyncDebug()
         // Make sure the widget drops any stale entry from the dead session.
         WidgetCenter.shared.reloadAllTimelines()
         setupAudioSession()
@@ -154,6 +157,12 @@ final class PlayerEngine: ObservableObject {
     private var lastSyncedIsPlaying = false
     private var lastSyncedArtworkURL: String?
 
+    private func updateSyncDebug() {
+        syncDebug = "group:\(JukeboxShared.groupReachable ? "OK" : "NO")"
+            + " track:\(lastSyncedTrackId ?? "-")"
+            + " playing:\(lastSyncedIsPlaying)"
+    }
+
     private func syncSharedState() {
         let trackId = current?.id
         let playing = isPlaying
@@ -164,6 +173,7 @@ final class PlayerEngine: ObservableObject {
         lastSyncedTrackId = trackId
         lastSyncedIsPlaying = playing
         lastSyncedArtworkURL = artworkURL
+        updateSyncDebug()
         JukeboxShared.write(
             trackId: trackId,
             isPlaying: playing,
