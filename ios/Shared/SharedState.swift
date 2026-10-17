@@ -12,7 +12,10 @@ enum JukeboxShared {
     static let toggleNotification = "studio.mikegyver.jukebox.toggle"
 
     /// Heartbeat younger than this means the app is (probably) alive.
-    static let heartbeatFreshInterval: TimeInterval = 300
+    /// The app stamps one every 60s and the widget never writes one, so a
+    /// stale value honestly means the app is gone and the widget falls back
+    /// to its "tap to open the app" link.
+    static let heartbeatFreshInterval: TimeInterval = 150
 
     enum Key {
         static let trackId = "currentTrackId"

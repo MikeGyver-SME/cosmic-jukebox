@@ -25,6 +25,8 @@ final class PlayerEngine: ObservableObject {
     func start() {
         // A stale `isPlaying=true` from a killed session must never linger.
         JukeboxShared.reset()
+        // Make sure the widget drops any stale entry from the dead session.
+        WidgetCenter.shared.reloadAllTimelines()
         setupAudioSession()
         setupRemoteCommands()
         observeWidgetToggle()
@@ -219,6 +221,14 @@ final class PlayerEngine: ObservableObject {
 
     // MARK: - Now Playing (lock screen + CarPlay)
 
+    /// In-memory artwork by track id. Seeded from the shared-container cache
+    /// (which the widget extension also feeds), so cover art survives app
+    /// restarts and the two processes share each download.
+    private var artworkImages: [String: UIImage] = [:]
+    private var artworkTask: Task<Void, Never>?
+    /// Track id whose artwork is currently published (or being fetched).
+    private var publishedArtworkTrackId: String?
+
     private func setupRemoteCommands() {
         let cc = MPRemoteCommandCenter.shared()
         cc.playCommand.addTarget { [weak self] _ in
@@ -239,30 +249,66 @@ final class PlayerEngine: ObservableObject {
     }
 
     private func updateNowPlaying() {
-        var info: [String: Any] = [:]
+        // Merge into the existing info dict. Rebuilding it from scratch on
+        // every pause/resume/track-change was the CarPlay bug: it wiped the
+        // artwork each time and the cover only came back if the re-download
+        // won the race — otherwise CarPlay sat on the default art.
+        var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
         if let t = current {
             info[MPMediaItemPropertyTitle] = t.title
             info[MPMediaItemPropertyArtist] = t.artist
             if let album = t.albumTitle, !album.isEmpty {
                 info[MPMediaItemPropertyAlbumTitle] = album
+            } else {
+                info.removeValue(forKey: MPMediaItemPropertyAlbumTitle)
             }
+            if let img = cachedArtworkImage(for: t) {
+                // Cached: publish instantly, no blank-art gap.
+                info[MPMediaItemPropertyArtwork] =
+                    MPMediaItemArtwork(boundsSize: img.size) { _ in img }
+                publishedArtworkTrackId = t.id
+            } else if publishedArtworkTrackId != t.id {
+                // New track with no cached art yet: clear the previous
+                // track's cover (never show the wrong one) and fetch in
+                // the background; the fetch re-publishes on arrival.
+                info.removeValue(forKey: MPMediaItemPropertyArtwork)
+                publishedArtworkTrackId = t.id
+                fetchArtwork(for: t)
+            }
+            // Same track, art still downloading: leave the dict untouched.
+        } else {
+            info.removeValue(forKey: MPMediaItemPropertyArtwork)
+            publishedArtworkTrackId = nil
         }
         info[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
-        // Artwork arrives async; refresh the info dict when it lands.
-        if let artURL = current?.artwork {
-            Task { [weak self] in
-                guard let self else { return }
-                if let data = try? await URLSession.shared.data(from: artURL).0,
-                   let image = UIImage(data: data) {
-                    await MainActor.run {
-                        // Only apply if this is still the current track.
-                        guard self.current?.artwork == artURL else { return }
-                        var updated = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
-                        updated[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
-                        MPNowPlayingInfoCenter.default().nowPlayingInfo = updated
-                    }
-                }
+    }
+
+    private func cachedArtworkImage(for track: Track) -> UIImage? {
+        if let img = artworkImages[track.id] { return img }
+        if let data = JukeboxShared.cachedArtwork(trackId: track.id),
+           let img = UIImage(data: data) {
+            artworkImages[track.id] = img
+            return img
+        }
+        return nil
+    }
+
+    private func fetchArtwork(for track: Track) {
+        artworkTask?.cancel()
+        guard let artURL = track.artwork else { return }
+        let trackId = track.id
+        artworkTask = Task { [weak self] in
+            guard let self else { return }
+            guard let (data, _) = try? await URLSession.shared.data(from: artURL),
+                  let image = UIImage(data: data),
+                  !Task.isCancelled else { return }
+            // Share the bytes with the widget extension too.
+            JukeboxShared.cacheArtwork(data, trackId: trackId)
+            await MainActor.run {
+                self.artworkImages[trackId] = image
+                // Only publish if this is still the current track.
+                if self.current?.id == trackId { self.updateNowPlaying() }
             }
         }
     }
