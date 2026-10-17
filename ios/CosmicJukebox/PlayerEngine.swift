@@ -336,6 +336,10 @@ final class PlayerEngine: ObservableObject {
                   !Task.isCancelled else { return }
             // Share the bytes with the widget extension too.
             JukeboxShared.cacheArtwork(data, trackId: trackId)
+            // Pre-scale a widget-safe copy; the extension can't hold full-size art.
+            if let small = JukeboxShared.downscaledJPEG(data, maxPixelSize: JukeboxShared.widgetArtworkMaxPixelSize) {
+                JukeboxShared.cacheWidgetArtwork(small, trackId: trackId)
+            }
             await MainActor.run {
                 self.artworkImages[trackId] = image
                 // Only publish if this is still the current track.

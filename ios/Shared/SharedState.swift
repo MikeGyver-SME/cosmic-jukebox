@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 
 /// Shared playback state between the Cosmic Jukebox app and its widget,
 /// backed by the App Group `group.studio.mikegyver.cosmicjukebox`.
@@ -126,5 +127,58 @@ enum JukeboxShared {
     static func cacheArtwork(_ data: Data, trackId: String) {
         guard let url = artworkCacheURL(trackId: trackId) else { return }
         try? data.write(to: url, options: .atomic)
+    }
+
+    // MARK: - Widget artwork (memory-safe)
+
+    /// Max pixel dimension for artwork handed to the widget. Widget
+    /// extensions are killed (~30MB limit) decoding multi-megapixel covers —
+    /// that was the "faceless widget" crash: full-size art cached for CarPlay
+    /// decoded to tens of MB inside the extension. 256px is plenty for the
+    /// widget's 76pt image.
+    static let widgetArtworkMaxPixelSize = 256
+
+    static func widgetArtworkCacheURL(trackId: String) -> URL? {
+        FileManager.default
+            .containerURL(forSecurityApplicationGroupIdentifier: appGroupID)?
+            .appendingPathComponent("widget-artwork-\(safeFileName(trackId)).jpg")
+    }
+
+    static func cachedWidgetArtwork(trackId: String) -> Data? {
+        guard let url = widgetArtworkCacheURL(trackId: trackId) else { return nil }
+        return try? Data(contentsOf: url)
+    }
+
+    static func cacheWidgetArtwork(_ data: Data, trackId: String) {
+        guard let url = widgetArtworkCacheURL(trackId: trackId) else { return }
+        try? data.write(to: url, options: .atomic)
+    }
+
+    /// Widget-sized artwork for a track, or nil. Never holds the full
+    /// bitmap: prefers the pre-scaled cache file, otherwise thumbnails the
+    /// full-size data directly via ImageIO.
+    static func widgetArtworkData(trackId: String) -> Data? {
+        if let small = cachedWidgetArtwork(trackId: trackId) { return small }
+        guard let full = cachedArtwork(trackId: trackId),
+              let small = downscaledJPEG(full, maxPixelSize: widgetArtworkMaxPixelSize) else { return nil }
+        cacheWidgetArtwork(small, trackId: trackId)
+        return small
+    }
+
+    /// Memory-safe JPEG downscale via ImageIO thumbnails — never decodes the
+    /// full bitmap, so it's safe to call inside the widget extension.
+    static func downscaledJPEG(_ data: Data, maxPixelSize: Int) -> Data? {
+        guard let src = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        let options: CFDictionary = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceShouldCache: false,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
+        ] as CFDictionary
+        guard let thumb = CGImageSourceCreateThumbnailAtIndex(src, 0, options) else { return nil }
+        let out = NSMutableData()
+        guard let dest = CGImageDestinationCreateWithData(out, "public.jpeg" as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(dest, thumb, nil)
+        guard CGImageDestinationFinalize(dest) else { return nil }
+        return out as Data
     }
 }

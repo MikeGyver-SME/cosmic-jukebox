@@ -46,7 +46,8 @@ struct JukeboxProvider: TimelineProvider {
     /// new art lands, so the cache is always warm a moment after a change.
     private func makeEntry() async -> JukeboxEntry {
         let snap = JukeboxShared.snapshot()
-        let data: Data? = snap.trackId.flatMap { JukeboxShared.cachedArtwork(trackId: $0) }
+        // Widget-sized art only — full-size covers kill the extension (~30MB).
+        let data: Data? = snap.trackId.flatMap { JukeboxShared.widgetArtworkData(trackId: $0) }
         return JukeboxEntry(date: Date(), snapshot: snap, artworkData: data)
     }
 }
