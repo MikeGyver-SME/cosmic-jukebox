@@ -87,6 +87,9 @@ enum JukeboxShared {
     }
 
     /// Write full playback state; always stamps a fresh heartbeat.
+    /// Forces a cross-process sync: without it the widget extension can read
+    /// a stale snapshot (its timeline refresh races the write), and then the
+    /// change-detection in syncSharedState never gives it another chance.
     static func write(trackId: String?, isPlaying: Bool, title: String?, artist: String?, artworkURL: String?) {
         let d = defaults
         if let trackId { d.set(trackId, forKey: Key.trackId) } else { d.removeObject(forKey: Key.trackId) }
@@ -95,6 +98,7 @@ enum JukeboxShared {
         if let artist { d.set(artist, forKey: Key.artist) } else { d.removeObject(forKey: Key.artist) }
         if let artworkURL { d.set(artworkURL, forKey: Key.artworkURL) } else { d.removeObject(forKey: Key.artworkURL) }
         d.set(Date().timeIntervalSince1970, forKey: Key.heartbeat)
+        CFPreferencesAppSynchronize(appGroupID as CFString)
     }
 
     static func writeHeartbeat() {
@@ -157,12 +161,11 @@ enum JukeboxShared {
     /// Widget-sized artwork for a track, or nil. Never holds the full
     /// bitmap: prefers the pre-scaled cache file, otherwise thumbnails the
     /// full-size data directly via ImageIO.
+    /// Widget-safe artwork: ONLY the pre-scaled small file. The extension must
+    /// never decode full-size art (not even via ImageIO thumbnails) — the
+    /// ~30MB extension memory limit jetsams it. The app pre-scales on download.
     static func widgetArtworkData(trackId: String) -> Data? {
-        if let small = cachedWidgetArtwork(trackId: trackId) { return small }
-        guard let full = cachedArtwork(trackId: trackId),
-              let small = downscaledJPEG(full, maxPixelSize: widgetArtworkMaxPixelSize) else { return nil }
-        cacheWidgetArtwork(small, trackId: trackId)
-        return small
+        cachedWidgetArtwork(trackId: trackId)
     }
 
     /// Memory-safe JPEG downscale via ImageIO thumbnails — never decodes the

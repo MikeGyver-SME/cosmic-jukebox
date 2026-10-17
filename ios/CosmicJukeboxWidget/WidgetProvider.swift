@@ -45,8 +45,12 @@ struct JukeboxProvider: TimelineProvider {
     /// downloads every cover for CarPlay anyway and reloads the widget when
     /// new art lands, so the cache is always warm a moment after a change.
     private func makeEntry() async -> JukeboxEntry {
+        // Force a fresh cross-process read: without this the extension can
+        // serve a stale snapshot that raced an earlier write.
+        CFPreferencesAppSynchronize(JukeboxShared.appGroupID as CFString)
         let snap = JukeboxShared.snapshot()
         // Widget-sized art only — full-size covers kill the extension (~30MB).
+        // The app pre-scales on download; the extension never decodes full-size.
         let data: Data? = snap.trackId.flatMap { JukeboxShared.widgetArtworkData(trackId: $0) }
         return JukeboxEntry(date: Date(), snapshot: snap, artworkData: data)
     }

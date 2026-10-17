@@ -167,21 +167,25 @@ final class PlayerEngine: ObservableObject {
         let trackId = current?.id
         let playing = isPlaying
         let artworkURL = current?.artwork?.absoluteString
-        guard trackId != lastSyncedTrackId
+        let changed = trackId != lastSyncedTrackId
                 || playing != lastSyncedIsPlaying
-                || artworkURL != lastSyncedArtworkURL else { return }
-        lastSyncedTrackId = trackId
-        lastSyncedIsPlaying = playing
-        lastSyncedArtworkURL = artworkURL
-        updateSyncDebug()
-        JukeboxShared.write(
-            trackId: trackId,
-            isPlaying: playing,
-            title: current?.title,
-            artist: current?.artist,
-            artworkURL: artworkURL
-        )
-        JukeboxShared.postDarwin(JukeboxShared.stateNotification)
+                || artworkURL != lastSyncedArtworkURL
+        if changed {
+            lastSyncedTrackId = trackId
+            lastSyncedIsPlaying = playing
+            lastSyncedArtworkURL = artworkURL
+            updateSyncDebug()
+            JukeboxShared.write(
+                trackId: trackId,
+                isPlaying: playing,
+                title: current?.title,
+                artist: current?.artist,
+                artworkURL: artworkURL
+            )
+            JukeboxShared.postDarwin(JukeboxShared.stateNotification)
+        }
+        // Always reload: if the widget's last refresh raced a write and read
+        // stale data, this gives it another chance on every transport event.
         WidgetCenter.shared.reloadAllTimelines()
     }
 
