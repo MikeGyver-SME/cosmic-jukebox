@@ -261,6 +261,10 @@ final class PlayerEngine: ObservableObject {
     /// restarts and the two processes share each download.
     private var artworkImages: [String: UIImage] = [:]
     private var artworkTask: Task<Void, Never>?
+    /// Track ids whose widget artwork heal was already attempted this
+    /// launch, so a track that resists healing isn't retried on every
+    /// transport event.
+    private var widgetArtworkHealAttempts = Set<String>()
     /// Track id whose artwork is currently published (or being fetched).
     private var publishedArtworkTrackId: String?
 
@@ -324,9 +328,29 @@ final class PlayerEngine: ObservableObject {
         if let data = JukeboxShared.cachedArtwork(trackId: track.id),
            let img = UIImage(data: data) {
             artworkImages[track.id] = img
+            healWidgetArtworkIfNeeded(data: data, trackId: track.id)
             return img
         }
         return nil
+    }
+
+    /// The widget-sized file is written only when artwork is freshly
+    /// downloaded in fetchArtwork. A track whose full-size art was already
+    /// in the shared cache (cached by an earlier build, or by any path that
+    /// never ran the pre-scale step) never got one, so the widget showed
+    /// its placeholder for that track forever — the "art worked for a day,
+    /// then stopped" regression. Heal it here, app-side where memory is
+    /// plentiful: if the small file is missing, make it from the full-size
+    /// data already in hand and give the widget one refresh.
+    private func healWidgetArtworkIfNeeded(data: Data, trackId: String) {
+        guard !widgetArtworkHealAttempts.contains(trackId) else { return }
+        widgetArtworkHealAttempts.insert(trackId)
+        guard JukeboxShared.cachedWidgetArtwork(trackId: trackId) == nil,
+              let small = JukeboxShared.downscaledJPEG(
+                  data, maxPixelSize: JukeboxShared.widgetArtworkMaxPixelSize)
+        else { return }
+        JukeboxShared.cacheWidgetArtwork(small, trackId: trackId)
+        WidgetCenter.shared.reloadAllTimelines()
     }
 
     private func fetchArtwork(for track: Track) {
